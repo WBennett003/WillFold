@@ -1,0 +1,23 @@
+Improvements of AF3:
+ - MLP size and shape
+ - Remove Crossattention for AdaLN-zero
+ - Remove Attentions for Aaron
+ - Replace activated layers with KGA
+ - Layers with big transformer layers for Hyena?
+ - Add energetic potential predictions or loss or metric
+ - Add a force / potential energy track, and make a reinforcement / Physics informed training loop
+
+TODO:
+- Fix the local atom and ligand parsing from mmcif files
+- 
+
+
+ # f : {ref_pos     : 0,
+        ref_charge  : 1,
+        ref_mask    : 2,
+        ref_element : 3,
+        ref_atom_name_chars : 4,
+        ref_space_uid : 5,
+        asym_id     : 6,
+        residue_idx : 7,
+        token_idx   : 8}
