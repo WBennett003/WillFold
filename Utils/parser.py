@@ -1,8 +1,7 @@
 import torch
 from Bio.PDB.MMCIF2Dict import MMCIF2Dict
+from Bio.PDB.MMCIFParser import MMCIFParser
 import json
-
-     
 
 Token_dict = {
     "UNK" : 0,
@@ -102,6 +101,34 @@ Chain_dict = {
 proteins_tokens = list(Token_dict.keys())[1:21]
 DNA_tokens = list(Token_dict.keys())[21:25]
 RNA_tokens = list(Token_dict.keys())[25:]
+
+def cif_to_tensor(cif_file_location):
+    parser = MMCIFParser(cif_file_location)
+
+    struct = parser.get_structure()
+    entities = []
+    for chain in struct.get_chains():
+        chain = []
+        for res in chain:
+            if res.get_resname() in protein_tokens or res.get_name() in DNA_tokens or res.get_name() in RNA_tokens:
+                chain.append(res.get_resname())
+            else:
+                chain.append("UNK")
+
+    x_pos = x['_atom_site.Cartn_x']
+    y_pos = x['_atom_site.Cartn_y']
+    z_pos = x['_atom_site.Cartn_z']
+    occupancy = x['_atom_site.occupancy']
+    beta_temp = x['_atom_site.B_iso_or_equiv']
+
+    atom_id = x['_atom_site.type_symbol']
+    alt_atom_id = x['_atom_site.label_atom_id']
+    entity = x['_atom_site.label_entity_id']
+    asym = x['_atom_site.label_asym_id']
+    seq_id = x['_atom_site.label_seq_id']
+    comp_id = x['_atom_site.label_comp_id']
+    charge_id = x['_atom_site.pdbx_formal_charge']
+
 
 def Parse_Cif(filelocation):
     x = MMCIF2Dict(filelocation)
