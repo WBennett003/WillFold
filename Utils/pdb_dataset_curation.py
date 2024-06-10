@@ -50,7 +50,7 @@ from pdbeccdutils.core import ccd_reader
 from pdbeccdutils.core.ccd_reader import CCDReaderResult
 from tqdm.contrib.concurrent import process_map
 
-from alphafold3_pytorch.typing import typecheck
+from Utils.typing import typecheck
 
 # Constants
 

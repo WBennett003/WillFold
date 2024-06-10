@@ -8,36 +8,8 @@ import requests
 with open("token_ref.json", 'r') as f:
     token_ref = json.load(f)
 
-class CCD_manager:
-    def __init__(self, reference_filepath='Reference_Confomer/', json_name='reference_conformer.json'):
-        self.path = reference_filepath
-        self.json_filename = json_name
-        with open(reference_filepath+json_name, 'r') as f:
-            self.ref = json.load(f)
-    
-
-    def get_ccd(self, ccd_code):
-        if ccd_code in self.ref['CCD']:
-            with open(self.path+ccd_code+'.sdf', 'r') as f:
-                r = f.read()
-            mol = Chem.MolFromMolBlock(r)
-            
-        else:
-            r = requests.get("https://www.ebi.ac.uk/pdbe-srv/pdbechem/chemicalCompound/show/"+ccd_code+".sdf").text
-            mol = Chem.MolFromMolBlock(r)
-            mol = Chem.RemoveAllHs(mol)      
-            with Chem.SDWriter(self.path+ccd_code+'.sdf') as w:
-                for m in mol:
-                    w.write(m)
-
-            self.ref['CCD'].append(ccd_code)
-
-            with open(self.path+self.json_filename, 'w') as f:
-                json.dump(self.ref)     
-
-        return mol
-
 Element_dict = {
+    " " : 0,
     "H" : 1,
     "He" : 2,
     "Li" : 3,
@@ -88,29 +60,109 @@ Element_dict = {
     "Cd" : 48
 }
 
-def generate_atoms(residue, pad_size=4, N_max_atoms=24):
-    atoms = token_ref[residue]['atoms']
+def remove_condense_atoms():
+    pass
+
+class CCD_manager:
+    def __init__(self, reference_filepath='Reference_Confomer/', json_name='reference_conformer.json'):
+        self.path = reference_filepath
+        self.json_filename = json_name
+        with open(reference_filepath+json_name, 'r') as f:
+            self.ref = json.load(f)
+    
+
+    def get_ccd(self, ccd_code):
+        if ccd_code in self.ref['CCD']:
+            with open(self.path+ccd_code+'.sdf', 'r') as f:
+                r = f.read()
+            mol = Chem.MolFromMolBlock(r)
+            
+        else:
+            r = requests.get("https://www.ebi.ac.uk/pdbe-srv/pdbechem/chemicalCompound/show/"+ccd_code+"_ideal.sdf").text
+            mol = Chem.MolFromMolBlock(r)
+            mol = Chem.RemoveAllHs(mol)    
+            if ccd_code in list(token_ref.keys()):
+                match token_ref[ccd_code]['mol_type']:
+                    case "protein":
+                        #remove the carbonates hydroxyl
+                        mol = Chem.rdchem.EditableTpMol(mol)
+                        natoms = len([a for a in mol.GetAtoms()])
+                        mol.RemoveAtom(natoms)
+                        mol = mol.GetMol()
+                    case "dna":
+                        mol = Chem.rdchem.EditableTpMol(mol)
+                        mol.RemoveAtom(2)
+                        mol = mol.GetMol()
+                    case "rna":
+                        mol = Chem.rdchem.EditableTpMol(mol)
+                        mol.RemoveAtom(2)
+                        mol = mol.GetMol()
+
+            with Chem.SDWriter(self.path+ccd_code+'.sdf') as w:
+                for m in mol:
+                    w.write(m)
+
+            self.ref['CCD'].append(ccd_code)
+
+            with open(self.path+self.json_filename, 'w') as f:
+                json.dump(self.ref)     
+
+        #get atoms
+        atoms_name = []
+        atoms_pos = []
+        for atoms in mol.GetAtoms():
+            pos = mol.GetConformer().GetAtomPosition(atoms.GetIdx())
+            atoms_pos.append([pos.x, pos.y, pos.z])
+            atoms_name.append(atoms.GetSymbol())
+
+        bonds = []
+        for bond in mol.GetBonds():
+            ai = bond.GetBeginAtomIdx()
+            aj = bond.GetEndAtomIdx()
+            bonds.append([ai, aj])
+
+        return mol, atoms_name, atoms_pos, bonds
+
+def generate_atoms(entity, pad_size=4, N_max_atoms=24, parser=None):
+    atoms = token_ref[entity]['atoms']
     length = len(atoms)
-    atom_mask = torch.zeros(N_max_atoms)
-    atom_mask[:length] = 1.0
+
+    mol, atoms_name, atoms_pos, bonds = parser.get_ccd(entity)
 
     elements = [Element_dict[a[0]] for a in atoms]
+    assert elements == atoms_name
 
-    atom_padding = ['    ' for i in range(N_max_atoms - length)] 
-    atoms.extend(atom_padding)
     for i, a in enumerate(atoms):
         atoms[i] = a + ' '* (pad_size-len(a))
-        elements.append(a[0])
 
     ref_atoms_chars = [[ord(c)-32 for c in a] for a in atoms]
 
-    ref_atom_idx = token_ref[residue]['ref_atom_idx']
+    ref_atom_idx = token_ref[entity]['ref_atom_idx']
 
+    return atoms, ref_atoms_chars, elements, ref_atom_idx, atoms_pos
+
+def generate_ligand_atoms(entity, pad_size=4, N_max_atoms=24, parser=None):
+    mol, atoms_name, atoms_pos, bonds = parser.get_ccd(entity)
+    length = len(atoms_name)
     
+    ref_atoms_chars = []
+    elements = []
 
-    return atoms, ref_atoms_chars, atom_mask, elements, ref_atom_idx
+    for i, atom in enumerate(atoms_name):
+        elements.append(atom[0])
 
-def process_entities(entities, ccd_reader_results=None, N_max_atoms=24):
+        atom  += ' ' * (pad_size - len(atom))
+        ref_atoms_chars.append([ord(c) for c in atom])
+    
+    return atoms_name, atoms_pos, ref_atoms_chars, elements, bonds
+
+
+
+
+def process_entities(entities, implicit_token_bonds=None, padding_size=4, N_max_atoms=24):
+
+    ccd_manager = CCD_manager()
+
     tokens = []
     res_types = []
     ref_atom_name_chars = []
@@ -118,6 +170,8 @@ def process_entities(entities, ccd_reader_results=None, N_max_atoms=24):
     ref_pos = []
     ref_elements = []
     ref_atom_idx = []
+    ref_space_uid = []
+    chain_set_pairs = []
 
     total_tokens = []
     total_atoms = []
@@ -130,6 +184,8 @@ def process_entities(entities, ccd_reader_results=None, N_max_atoms=24):
     is_dna = []
     is_ligand = []
 
+    token_bonds = implicit_token_bonds
+
     asym_count = 0
 
     for i, entity in enumerate(entities):
@@ -138,6 +194,12 @@ def process_entities(entities, ccd_reader_results=None, N_max_atoms=24):
                
         for token in entity:
             if token in list(token_ref.keys()):
+                uid = entity+token
+                if uid in chain_set_pairs:
+                    ref_space_uid.append(chain_set_pairs.index(uid))
+                else:
+                    chain_set_pairs.append(uid)
+                    ref_space_uid.append(len(chain_set_pairs))
 
                 if token_ref[token]['mol_type'] == 'protein':
                     is_ligand.append(0)
@@ -147,12 +209,13 @@ def process_entities(entities, ccd_reader_results=None, N_max_atoms=24):
 
                     res_types.append(token_ref[token]['token_idx'])
                     entity_tokens.append(token)
-                    atoms, atom_name_char, mask, elements, ref_idx = generate_atoms(token)
+                    atoms, atom_name_char, mask, elements, ref_idx, atoms_pos = generate_atoms(token, padding_size, N_max_atoms, ccd_manager)
                     entity_atoms.append(atoms)
                     ref_atom_name_chars.append(atom_name_char)
                     ref_mask.append(mask)
                     ref_elements.append(elements)
                     ref_atom_idx.append(ref_idx)
+                    ref_pos.append(atoms_pos)
 
                 elif token_ref[token]['mol_type'] == 'dna':
                     is_ligand.append(0)
@@ -162,12 +225,14 @@ def process_entities(entities, ccd_reader_results=None, N_max_atoms=24):
 
                     res_types.append(token_ref[token]['token_idx'])
                     entity_tokens.append(token)
-                    atoms, atom_name_char, mask, elements, ref_idx = generate_atoms(token)
+                    atoms, atom_name_char, mask, elements, ref_idx, atoms_pos = generate_atoms(token, padding_size, N_max_atoms, ccd_manager)
                     entity_atoms.append(atoms)
                     ref_atom_name_chars.append(atom_name_char)
                     ref_mask.append(mask)
                     ref_elements.append(elements)
                     ref_atom_idx.append(ref_idx)
+                    ref_pos.append(atoms_pos)
+
 
                 elif token_ref[token]['mol_type'] == 'rna':
                     is_ligand.append(0)
@@ -175,15 +240,27 @@ def process_entities(entities, ccd_reader_results=None, N_max_atoms=24):
                     is_rna.append(0)
                     is_dna.append(1)
 
-
                     res_types.append(token_ref[token]['token_idx'])
                     entity_tokens.append(token)
-                    atoms, atom_name_char, mask, elements, ref_idx = generate_atoms(token)
+                    atoms, atom_name_char, mask, elements, ref_idx, atoms_pos = generate_atoms(token, padding_size, N_max_atoms, ccd_manager)
                     entity_atoms.append(atoms)
                     ref_atom_name_chars.append(atom_name_char)
                     ref_mask.append(mask)
                     ref_elements.append(elements)
                     ref_atom_idx.append(ref_idx)
+                    ref_pos.append(atoms_pos)
+
+                if entity_tokens in total_tokens:
+                    idx = total_atoms.index(entity_tokens)
+                    sym_idx = total_tokens.count(entity_tokens)
+                else:
+                    idx = asym_count + 1
+                    asym_count += 1    
+                    sym_idx = 0
+
+                asym_id.append(*[idx for i in range(len(entity_tokens))])
+                sym_id.append(*[sym_idx for i in range(len(entity_tokens))])
+
 
         else:
             is_ligand.append(1)
@@ -193,35 +270,34 @@ def process_entities(entities, ccd_reader_results=None, N_max_atoms=24):
 
 
             #NOTE : Need to fix this to get atom generation.
-            atoms, atoms_names,  = generate_atoms(entity)
+            atoms_name, atoms_pos, ref_atoms_chars, elements, bonds  = generate_ligand_atoms(entity, padding_size, N_max_atoms, ccd_manager)
 
-
-            padding = ((N_max_atoms - len(atoms)) * '<PAD> ').split(' ')
-
-            for atom in atoms:
+            for j,atom in enumerate(atoms_name):
                 res_types.append(0)
                 entity_tokens.append("UNK")
-                ass = [atom]
-                ass.append(padding)
-                
-                entity_atoms.append(ass)
+                entity_atoms.append(atom)                
                 entity_ids.append(i)    
 
 
-        if entity_tokens in total_tokens:
-            idx = total_atoms.index(entity_tokens)
-            sym_idx = total_tokens.count(entity_tokens)
-        else:
-            idx = asym_count + 1
-            asym_count += 1    
-            sym_idx = 0
+                uid = entity+token
+                if uid in chain_set_pairs:
+                    ref_space_uid.append(chain_set_pairs.index(uid))
+                else:
+                    chain_set_pairs.append(uid)
+                    ref_space_uid.append(len(chain_set_pairs))
 
-        asym_id.extend([idx for i in range(len(entity_tokens))])
-        sym_id.extend([sym_idx for i in range(len(entity_tokens))])
-        total_tokens.append(entity_tokens)
-        total_atoms.append(entity_atoms)
-        tokens.extend(entity_tokens)
-        atoms.extend(entity_atoms)
 
-            
+                if entity_tokens in total_tokens:
+                    idx = total_atoms.index(entity_tokens)
+                    sym_idx = total_tokens.count(entity_tokens)
+                else:
+                    idx = asym_count + 1
+                    asym_count += 1    
+                    sym_idx = 0
+
+                asym_id.append(*[idx for i in range(len(entity_tokens))])
+                sym_id.append(*[sym_idx for i in range(len(entity_tokens))])
+        
+
+
 

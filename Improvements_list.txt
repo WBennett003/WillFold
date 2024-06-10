@@ -9,7 +9,8 @@ Improvements of AF3:
 
 TODO:
 - Fix the local atom and ligand parsing from mmcif files
-- 
+- Include is_protein etc data into the input feature embeddding as it is not in the tempalte encodings
+- Fix bonds in the input parser
 
 
  # f : {ref_pos     : 0,

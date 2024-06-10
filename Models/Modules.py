@@ -6,6 +6,11 @@ from einops import rearrange, repeat
 import numpy as np
 import math
 
+try:
+    from flash_attn import flash_attn_qkvpacked_func, flash_attn_func
+except:
+    flash_attn = None
+
 def extract(a, t, x_shape):
     batch_size = t.shape[0]
     a = a.cpu()
@@ -241,6 +246,7 @@ class AttentionPairBias(nn.Module): # the conditional and MPNN crosstalk step
         if s is not None:
             a = F.sigmoid(self.out_proj(s)) * a
         return a
+
 
 class PairformerLayer(nn.Module):
     def __init__(self, params):
