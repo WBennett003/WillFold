@@ -7,53 +7,53 @@
         "token_id" : 1,
         "atoms" : ["N", "CA", "C", "O", "CB"],
         "mol_type" : "protein",
-        "ref_atom" : "CA",
-        "ref_atom_idx" : 1
+        "ref_atom" : "CB",
+        "ref_atom_idx" : 4
     },
     "ARG" : {
         "token_id" : 2,
         "atoms" : ["N", "CA", "C", "O", "CB", "CG", "CD", "NE", "CZ", "NH1", "NH2"],
         "mol_type" : "protein",
-        "ref_atom" : "CA",
-        "ref_atom_idx" : 1
+        "ref_atom" : "CB",
+        "ref_atom_idx" : 4
     },
     "ASN" : {
         "token_id" : 3,
-        "atoms" : ["N", "CA", "C", "O", "CB", "CG", "OD1", "ND2", "ND21"],
+        "atoms" : ["N", "CA", "C", "O", "CB", "CG", "OD1", "ND2"],
         "mol_type" : "protein",
-        "ref_atom" : "CA",
-        "ref_atom_idx" : 1
+        "ref_atom" : "CB",
+        "ref_atom_idx" : 4
     },
     "ASP" : {
         "token_id" : 4,
         "atoms" : ["N", "CA", "C", "O", "CB", "CG", "OD1", "OD2"],
         "mol_type" : "protein",
-        "ref_atom" : "CA",
-        "ref_atom_idx" : 1
+        "ref_atom" : "CB",
+        "ref_atom_idx" : 4
 
     },
     "CYS" : {
         "token_id" : 5,
         "atoms" : ["N", "CA", "C", "O", "CB", "SG"],
         "mol_type" : "protein",
-        "ref_atom" : "CA",
-        "ref_atom_idx" : 1
+        "ref_atom" : "CB",
+        "ref_atom_idx" : 4
 
     },
     "GLU" : {
         "token_id" : 6,
         "atoms" : ["N", "CA", "C", "O", "CB", "CG", "CD", "OE1", "OE2"], 
         "mol_type" : "protein",
-        "ref_atom" : "CA",
-        "ref_atom_idx" : 1
+        "ref_atom" : "CB",
+        "ref_atom_idx" : 4
 
     },
     "GLN" : {
         "token_id" : 7,
-        "atoms" : ["N", "CA", "C", "O", "CB", "CG", "2CD", "OE1", "NE2"],
+        "atoms" : ["N", "CA", "C", "O", "CB", "CG", "CD2", "OE1", "NE2"],
         "mol_type" : "protein",
-        "ref_atom" : "CA",
-        "ref_atom_idx" : 1
+        "ref_atom" : "CB",
+        "ref_atom_idx" : 4
 
     },
     "GLY" : {
@@ -68,144 +68,144 @@
         "token_id" : 9,
         "atoms" : ["N", "CA", "C", "O", "CB", "CG", "ND1", "CD2", "CE1", "NE2"],
         "mol_type" : "protein",
-        "ref_atom" : "CA",
-        "ref_atom_idx" : 1
+        "ref_atom" : "CB",
+        "ref_atom_idx" : 4
 
     },
     "ILE" : {
         "token_id" : 10, 
         "atoms" : ["N", "CA", "C", "O", "CB", "CG1", "CG2", "CD1"],
         "mol_type" : "protein",
-        "ref_atom" : "CA",
-        "ref_atom_idx" : 1
+        "ref_atom" : "CB",
+        "ref_atom_idx" : 4
 
     },
     "LEU" : {
         "token_id" : 11,
         "atoms" : ["N", "CA", "C", "O", "CB", "CG", "CD1", "CD2"],
         "mol_type" : "protein",
-        "ref_atom" : "CA",
-        "ref_atom_idx" : 1
+        "ref_atom" : "CB",
+        "ref_atom_idx" : 4
 
     },
     "LYS" : {
         "token_id" : 12,
         "atoms" : ["N", "CA", "C", "O", "CB", "CG", "CD", "CE", "NZ"],
         "mol_type" : "protein",
-        "ref_atom" : "CA",
-        "ref_atom_idx" : 1
+        "ref_atom" : "CB",
+        "ref_atom_idx" : 4
     },
     "MET" :{
         "token_id" : 13,
         "atoms" : ["N", "CA", "C", "O", "CB", "CG", "SD", "CE"],
         "mol_type" : "protein",
-        "ref_atom" : "CA",
-        "ref_atom_idx" : 1
+        "ref_atom" : "CB",
+        "ref_atom_idx" : 4
     },
     "PHE" : {
         "token_id" : 14,
         "atoms" : ["N", "CA", "C", "O", "CB", "CG", "CD1", "CD2", "CE1", "CE2", "CZ"],
         "mol_type" : "protein",
-        "ref_atom" : "CA",
-        "ref_atom_idx" : 1
+        "ref_atom" : "CB",
+        "ref_atom_idx" : 4
     },
     "PRO" : {
         "token_id" : 15,
         "atoms" : ["N", "CA", "C", "O", "CB", "CG", "CD"],
         "mol_type" : "protein",
-        "ref_atom" : "CA",
-        "ref_atom_idx" : 1
+        "ref_atom" : "CB",
+        "ref_atom_idx" : 4
     },
     "SER" : {
         "token_id" : 16, 
         "atoms" : ["N", "CA", "C", "O", "CB", "OG"], 
         "mol_type" : "protein",
-        "ref_atom" : "CA",
-        "ref_atom_idx" : 1
+        "ref_atom" : "CB",
+        "ref_atom_idx" : 4
     },
     "THR" : {
         "token_id" : 17, 
-        "atoms" : ["N", "CA", "C", "O", "CB", "OG1", "OG2"],
+        "atoms" : ["N", "CA", "C", "O", "CB", "OG1", "CG2"],
         "mol_type" : "protein",
-        "ref_atom" : "CA",
-        "ref_atom_idx" : 1
+        "ref_atom" : "CB",
+        "ref_atom_idx" : 4
     },
     "TRP" : {
         "token_id" : 18,
         "atoms" : ["N", "CA", "C", "O", "CB", "CG", "CD1", "CD2", "NE1", "CE2", "CE3", "CZ2", "CZ3", "CH2"],
         "mol_type" : "protein",
-        "ref_atom" : "CA",
-        "ref_atom_idx" : 1
+        "ref_atom" : "CB",
+        "ref_atom_idx" : 4
     },
     "TYR" : {
         "token_id" : 19, 
         "atoms" : ["N", "CA", "C", "O", "CB", "CG", "CD1", "CD2", "CE1", "CE2", "CZ", "OH"],
         "mol_type" : "protein",
-        "ref_atom" : "CA",
-        "ref_atom_idx" : 1
+        "ref_atom" : "CB",
+        "ref_atom_idx" : 4
     },
     "VAL" : {
         "token_id" : 20,
         "atoms" : ["N", "CA", "C", "O", "CB", "CG1", "CG2"],
         "mol_type" : "protein",
-        "ref_atom" : "CA",
-        "ref_atom_idx" : 1
+        "ref_atom" : "CB",
+        "ref_atom_idx" : 4
     },
     "DA" : {
         "token_id" : 21,
         "atoms" : ["P", "OP1'", "OP2'", "O5'", "C5'", "C4'", "O4'", "C3'", "O3'", "C2'", "C1'", "N9", "C8", "N7", "C5", "C6", "N6", "N1", "C2", "N3", "C4"],
         "mol_type" : "dna",
-        "ref_atom" : "C1'",
-        "ref_atom_idx" : 10
+        "ref_atom" : "C4",
+        "ref_atom_idx" : 21
     },
     "DC" : {
         "token_id" : 22,
         "atoms" : ["P", "OP1'", "OP2'", "O5'", "C5'", "C4'", "O4'", "C3'", "O3'", "C2'", "C1'", "N1", "C2", "O2", "N3", "C4", "N4", "C5", "C6"],
         "mol_type" : "dna",
-        "ref_atom" : "C1'",
-        "ref_atom_idx" : 10
+        "ref_atom" : "C2",
+        "ref_atom_idx" : 12
     },
     "DG" : {
         "token_id" : 23,
         "atoms" : ["P", "OP1'", "OP2'", "O5'", "C5'", "C4'", "O4'", "C3'", "O3'", "C2'", "C1'", "N9", "C8", "N7", "C5", "C6", "O6", "N1", "C2", "N2", "N3", "C4"],
         "mol_type" : "dna",
-        "ref_atom" : "C1'",
-        "ref_atom_idx" : 10
+        "ref_atom" : "C4",
+        "ref_atom_idx" : 21
     },
     "DT" : {
         "token_id" : 24,
         "atoms" : ["P", "OP1'", "OP2'", "O5'", "C5'", "C4'", "O4'", "C3'", "O3'", "C2'", "C1'", "N1", "C2", "O2", "N3", "C4", "O4", "C5", "C7", "C6"],
         "mol_type" : "dna",
-        "ref_atom" : "C1'",
-        "ref_atom_idx" : 10
+        "ref_atom" : "C2",
+        "ref_atom_idx" : 12
     },
     "A" : {
         "token_id" : 25,
         "atoms" : ["P", "OP1'", "OP2'", "O5'", "C5'", "C4'", "O4'", "C3'", "O3'", "C2'", "O2'", "C1'", "N1", "C9", "C8", "N7", "C5", "C6", "N6", "N1", "C2", "N3", "C4"],
         "mol_type" : "rna",
-        "ref_atom" : "C1'",
-        "ref_atom_idx" : 11
+        "ref_atom" : "C4",
+        "ref_atom_idx" : 22
     },
     "C" : {
         "token_id" : 26,
         "atoms" : ["P", "OP1'", "OP2'", "O5'", "C5'", "C4'", "O4'", "C3'", "O3'", "C2'", "O2'", "C1'", "N1", "C2", "O2", "N3", "C4", "N4", "C5", "C6"],
         "mol_type" : "rna",
-        "ref_atom" : "C1'",
-        "ref_atom_idx" : 11
+        "ref_atom" : "C2'",
+        "ref_atom_idx" : 13
     },
     "G" : {
         "token_id" : 27,
         "atoms" : ["P", "OP1'", "OP2'", "O5'", "C5'", "C4'", "O4'", "C3'", "O3'", "C2'", "O2'", "C1'", "N9", "C8", "N7", "C5", "C6", "O6", "N1", "C2", "N2", "N3", "C4"],
         "mol_type" : "rna",
-        "ref_atom" : "C1'",
-        "ref_atom_idx" : 11
+        "ref_atom" : "C4'",
+        "ref_atom_idx" : 22
     },
     "U" : {
         "token_id" : 28,
         "atoms" : ["P", "OP1'", "OP2'", "O5'", "C5'", "C4'", "O4'", "C3'", "O3'", "C2'", "O2'", "C1'", "N1", "C2", "O2", "N3", "C4", "O4", "C5", "C6"],
         "mol_type" : "rna",
-        "ref_atom" : "C1'",
-        "ref_atom_idx" : 11
+        "ref_atom" : "C2'",
+        "ref_atom_idx" : 13
     },
     "    " : {
         "token_id" : 29

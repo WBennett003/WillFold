@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 from rdkit import Chem
 from pdbeccdutils.core import ccd_reader
 from pdbeccdutils.core.ccd_reader import CCDReaderResult
@@ -64,10 +65,10 @@ def remove_condense_atoms():
     pass
 
 class CCD_manager:
-    def __init__(self, reference_filepath='Reference_Confomer/', json_name='reference_conformer.json'):
+    def __init__(self, reference_filepath='data/CCD/', json_name='reference_conformer.json'):
         self.path = reference_filepath
         self.json_filename = json_name
-        with open(reference_filepath+json_name, 'r') as f:
+        with open(json_name, 'r') as f:
             self.ref = json.load(f)
     
 
@@ -78,16 +79,16 @@ class CCD_manager:
             mol = Chem.MolFromMolBlock(r)
             
         else:
-            r = requests.get("https://www.ebi.ac.uk/pdbe-srv/pdbechem/chemicalCompound/show/"+ccd_code+"_ideal.sdf").text
+            r = requests.get("https://www.ebi.ac.uk/pdbe/static/files/pdbechem_v2/"+ccd_code+"_ideal.sdf").text
             mol = Chem.MolFromMolBlock(r)
             mol = Chem.RemoveAllHs(mol)    
             if ccd_code in list(token_ref.keys()):
                 match token_ref[ccd_code]['mol_type']:
                     case "protein":
                         #remove the carbonates hydroxyl
-                        mol = Chem.rdchem.EditableTpMol(mol)
                         natoms = len([a for a in mol.GetAtoms()])
-                        mol.RemoveAtom(natoms)
+                        mol = Chem.rdchem.EditableMol(mol)
+                        mol.RemoveAtom(natoms-1)
                         mol = mol.GetMol()
                     case "dna":
                         mol = Chem.rdchem.EditableTpMol(mol)
@@ -99,21 +100,22 @@ class CCD_manager:
                         mol = mol.GetMol()
 
             with Chem.SDWriter(self.path+ccd_code+'.sdf') as w:
-                for m in mol:
-                    w.write(m)
+                w.write(mol)
 
             self.ref['CCD'].append(ccd_code)
 
-            with open(self.path+self.json_filename, 'w') as f:
-                json.dump(self.ref)     
+            with open(self.json_filename, 'w') as f:
+                json.dump(self.ref, f)     
 
         #get atoms
         atoms_name = []
         atoms_pos = []
+        atoms_charge = []
         for atoms in mol.GetAtoms():
             pos = mol.GetConformer().GetAtomPosition(atoms.GetIdx())
             atoms_pos.append([pos.x, pos.y, pos.z])
             atoms_name.append(atoms.GetSymbol())
+            atoms_charge.append(atoms.GetFormalCharge())
 
         bonds = []
         for bond in mol.GetBonds():
@@ -121,16 +123,19 @@ class CCD_manager:
             aj = bond.GetEndAtomIdx()
             bonds.append([ai, aj])
 
-        return mol, atoms_name, atoms_pos, bonds
+        
+
+        return mol, atoms_name, atoms_pos, bonds, atoms_charge
 
 def generate_atoms(entity, pad_size=4, N_max_atoms=24, parser=None):
     atoms = token_ref[entity]['atoms']
     length = len(atoms)
 
-    mol, atoms_name, atoms_pos, bonds = parser.get_ccd(entity)
+    mol, atoms_name, atoms_pos, bonds, charge = parser.get_ccd(entity)
+
+    assert [a[0] for a in atoms] == atoms_name
 
     elements = [Element_dict[a[0]] for a in atoms]
-    assert elements == atoms_name
 
     for i, a in enumerate(atoms):
         atoms[i] = a + ' '* (pad_size-len(a))
@@ -139,10 +144,10 @@ def generate_atoms(entity, pad_size=4, N_max_atoms=24, parser=None):
 
     ref_atom_idx = token_ref[entity]['ref_atom_idx']
 
-    return atoms, ref_atoms_chars, elements, ref_atom_idx, atoms_pos
+    return atoms, ref_atoms_chars, elements, ref_atom_idx, atoms_pos, charge
 
 def generate_ligand_atoms(entity, pad_size=4, N_max_atoms=24, parser=None):
-    mol, atoms_name, atoms_pos, bonds = parser.get_ccd(entity)
+    mol, atoms_name, atoms_pos, bonds, charge = parser.get_ccd(entity)
     length = len(atoms_name)
     
     ref_atoms_chars = []
@@ -152,29 +157,15 @@ def generate_ligand_atoms(entity, pad_size=4, N_max_atoms=24, parser=None):
         elements.append(atom[0])
 
         atom  += ' ' * (pad_size - len(atom))
-        ref_atoms_chars.append([ord(c) for c in atom])
+        ref_atoms_chars.append([ord(c)-32 for c in atom])
     
-    return atoms_name, atoms_pos, ref_atoms_chars, elements, bonds
+    return atoms_name, atoms_pos, ref_atoms_chars, elements, bonds, charge
 
-
-
-
-def process_entities(entities, implicit_token_bonds=None, padding_size=4, N_max_atoms=24):
+def process_entities(entities, implicit_token_bonds=[], padding_size=4, N_max_atoms=24):
 
     ccd_manager = CCD_manager()
 
-    tokens = []
-    res_types = []
-    ref_atom_name_chars = []
-    ref_mask = []
-    ref_pos = []
-    ref_elements = []
-    ref_atom_idx = []
-    ref_space_uid = []
-    chain_set_pairs = []
-
-    total_tokens = []
-    total_atoms = []
+    residue_index = []
     entity_ids = []
     asym_id = []
     sym_id = []
@@ -184,120 +175,165 @@ def process_entities(entities, implicit_token_bonds=None, padding_size=4, N_max_
     is_dna = []
     is_ligand = []
 
+
+    res_types = []
+    ref_atom_name_chars = []
+    ref_mask = []
+    ref_pos = []
+    ref_elements = []
+    ref_charge = []
+    ref_atom_idx = []
+    ref_space_uid = []
+
+    represented_atoms = []
+    
+    chain_set_pairs = []
+
+    total_tokens = []
+    total_atoms = []
+
+    previous_entity = []
+    
     token_bonds = implicit_token_bonds
 
     asym_count = 0
-
+    token_shift = 0
+    atom_count = 0
     for i, entity in enumerate(entities):
         entity_tokens = []
         entity_atoms = []
-               
-        for token in entity:
+        res_count = 0
+
+        if entity in previous_entity:
+            idx = previous_entity.index(entity)
+            sym_idx = previous_entity.count(entity)
+            previous_entity.append(entity)
+        else:
+            idx = asym_count
+            asym_count += 1    
+            sym_idx = 0
+
+        for j, token in enumerate(entity):
             if token in list(token_ref.keys()):
-                uid = entity+token
+                match token_ref[token]['mol_type']: 
+                    case 'protein':
+                        is_ligand.append(0)
+                        is_protein.append(1)
+                        is_rna.append(0)
+                        is_dna.append(0)
+                    case 'dna':
+                        is_ligand.append(0)
+                        is_protein.append(0)
+                        is_rna.append(0)
+                        is_dna.append(1)
+                    case 'rna':
+                        is_ligand.append(0)
+                        is_protein.append()
+                        is_rna.append(1)
+                        is_dna.append(0)
+
+                residue_index.append(res_count)
+                uid = str(i)+token
+
+                res_types.append(token_ref[token]['token_id'])
+                entity_tokens.append(token)
+                atoms, atom_name_char, elements, ref_idx, atoms_pos, charge = generate_atoms(token, padding_size, N_max_atoms, ccd_manager)
+                entity_atoms.append(atoms)
+                entity_ids.append(i)    
+
+                ref_atom_name_chars.extend(atom_name_char)
+                # ref_mask.append(])
+                ref_elements.extend(elements)
+                ref_charge.extend(charge)
+                ref_pos.extend(atoms_pos)
+                ref_atom_idx.extend([len(residue_index)-1 for _ in range(len(elements))])
+                represented_atoms.append(atom_count+ref_idx)
+
+                atom_count += len(atoms)
+
+
+                asym_id.append(idx)
+                sym_id.append(sym_idx)
+                res_count += 1
+
+
                 if uid in chain_set_pairs:
-                    ref_space_uid.append(chain_set_pairs.index(uid))
+                    ref_space_uid.extend([chain_set_pairs.index(uid) for _ in range(len(elements))])
                 else:
                     chain_set_pairs.append(uid)
-                    ref_space_uid.append(len(chain_set_pairs))
+                    ref_space_uid.extend([len(chain_set_pairs) for _ in range(len(elements))])
+                    
 
-                if token_ref[token]['mol_type'] == 'protein':
-                    is_ligand.append(0)
-                    is_protein.append(1)
+
+            else:
+
+
+                #NOTE : Need to fix this to get atom generation.
+                atoms_name, atoms_pos, ref_atoms_chars, elements, bonds, charge  = generate_ligand_atoms(token, padding_size, N_max_atoms, ccd_manager)
+
+                for k,atom in enumerate(atoms_name):
+                    is_ligand.append(1)
+                    is_protein.append(0)
                     is_rna.append(0)
                     is_dna.append(0)
 
-                    res_types.append(token_ref[token]['token_idx'])
-                    entity_tokens.append(token)
-                    atoms, atom_name_char, mask, elements, ref_idx, atoms_pos = generate_atoms(token, padding_size, N_max_atoms, ccd_manager)
-                    entity_atoms.append(atoms)
-                    ref_atom_name_chars.append(atom_name_char)
-                    ref_mask.append(mask)
-                    ref_elements.append(elements)
-                    ref_atom_idx.append(ref_idx)
-                    ref_pos.append(atoms_pos)
+                    residue_index.append(res_count)
+                    res_types.append(0)
+                    entity_tokens.append("UNK")
+                    entity_atoms.append(atom)                
+                    entity_ids.append(i)    
+                    ref_pos.append(atoms_pos[k])
+                    ref_elements.append(Element_dict[elements[k]])
+                    ref_charge.append(charge[k])
+                    ref_atom_name_chars.append(ref_atoms_chars[k])
+                    ref_atom_idx.append(res_count)
 
-                elif token_ref[token]['mol_type'] == 'dna':
-                    is_ligand.append(0)
-                    is_protein.append(0)
-                    is_rna.append(0)
-                    is_dna.append(1)
+                    represented_atoms.append(atom_count)
 
-                    res_types.append(token_ref[token]['token_idx'])
-                    entity_tokens.append(token)
-                    atoms, atom_name_char, mask, elements, ref_idx, atoms_pos = generate_atoms(token, padding_size, N_max_atoms, ccd_manager)
-                    entity_atoms.append(atoms)
-                    ref_atom_name_chars.append(atom_name_char)
-                    ref_mask.append(mask)
-                    ref_elements.append(elements)
-                    ref_atom_idx.append(ref_idx)
-                    ref_pos.append(atoms_pos)
+                    atom_count += 1
+                    res_count +=1
 
+                    asym_id.append(idx)
+                    sym_id.append(sym_idx)
 
-                elif token_ref[token]['mol_type'] == 'rna':
-                    is_ligand.append(0)
-                    is_protein.append(0)
-                    is_rna.append(0)
-                    is_dna.append(1)
+                    uid = str(i)+token
+                    if uid in chain_set_pairs:
+                        ref_space_uid.append(chain_set_pairs.index(uid))
+                    else:
+                        chain_set_pairs.append(uid)
+                        ref_space_uid.append(len(chain_set_pairs))
 
-                    res_types.append(token_ref[token]['token_idx'])
-                    entity_tokens.append(token)
-                    atoms, atom_name_char, mask, elements, ref_idx, atoms_pos = generate_atoms(token, padding_size, N_max_atoms, ccd_manager)
-                    entity_atoms.append(atoms)
-                    ref_atom_name_chars.append(atom_name_char)
-                    ref_mask.append(mask)
-                    ref_elements.append(elements)
-                    ref_atom_idx.append(ref_idx)
-                    ref_pos.append(atoms_pos)
+                for bond in bonds:
+                    token_bonds.append([token_shift +j+ bond[0], token_shift +j+ bond[1]])
 
-                if entity_tokens in total_tokens:
-                    idx = total_atoms.index(entity_tokens)
-                    sym_idx = total_tokens.count(entity_tokens)
-                else:
-                    idx = asym_count + 1
-                    asym_count += 1    
-                    sym_idx = 0
-
-                asym_id.append(*[idx for i in range(len(entity_tokens))])
-                sym_id.append(*[sym_idx for i in range(len(entity_tokens))])
-
-
-        else:
-            is_ligand.append(1)
-            is_protein.append(0)
-            is_rna.append(0)
-            is_dna.append(0)
-
-
-            #NOTE : Need to fix this to get atom generation.
-            atoms_name, atoms_pos, ref_atoms_chars, elements, bonds  = generate_ligand_atoms(entity, padding_size, N_max_atoms, ccd_manager)
-
-            for j,atom in enumerate(atoms_name):
-                res_types.append(0)
-                entity_tokens.append("UNK")
-                entity_atoms.append(atom)                
-                entity_ids.append(i)    
-
-
-                uid = entity+token
-                if uid in chain_set_pairs:
-                    ref_space_uid.append(chain_set_pairs.index(uid))
-                else:
-                    chain_set_pairs.append(uid)
-                    ref_space_uid.append(len(chain_set_pairs))
-
-
-                if entity_tokens in total_tokens:
-                    idx = total_atoms.index(entity_tokens)
-                    sym_idx = total_tokens.count(entity_tokens)
-                else:
-                    idx = asym_count + 1
-                    asym_count += 1    
-                    sym_idx = 0
-
-                asym_id.append(*[idx for i in range(len(entity_tokens))])
-                sym_id.append(*[sym_idx for i in range(len(entity_tokens))])
+        token_shift += len(entity)
+    
+    token_bonds_matrix = torch.zeros((len(residue_index), len(residue_index)))
+    for bond in token_bonds:
+        token_bonds_matrix[bond[0], bond[1]] = 1
+        token_bonds_matrix[bond[1], bond[0]] = 1
+    
+    token_bonds_matrix
         
-
-
-
+    f = {
+    "residue_idx" : torch.tensor(residue_index),
+    "token_idx" : torch.arange(0, len(residue_index)),
+    "asym_id" : torch.tensor(asym_id),
+    "entity_id" : torch.tensor(entity_ids),
+    "sym_id" : torch.tensor(sym_id),
+    "restype" : F.one_hot(torch.tensor(res_types), 32),
+    "is_protein" : torch.tensor(is_protein),
+    "is_dna" : torch.tensor(is_dna),
+    "is_rna" : torch.tensor(is_rna),
+    "is_ligand" : torch.tensor(is_ligand),
+    "ref_pos" : torch.tensor(ref_pos),
+    "ref_mask" : torch.ones(len(ref_pos)),
+    "ref_element" : F.one_hot(torch.tensor(ref_elements), 128),
+    "ref_charge" : torch.tensor(ref_charge),
+    "ref_atom_name_chars" : F.one_hot(torch.tensor(ref_atom_name_chars), 64),
+    "ref_space_uid" : torch.tensor(ref_space_uid),
+    "token_bonds" : token_bonds_matrix,
+    "reference_tokens" : F.one_hot(torch.tensor(ref_atom_idx), len(residue_index)).float(),
+    "represenative_atoms" : F.one_hot(torch.tensor(represented_atoms), len(ref_pos)).float()
+    }
+    return f

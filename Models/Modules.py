@@ -11,6 +11,59 @@ try:
 except:
     flash_attn = None
 
+def broadcast_tokens_to_atoms(tokens, transition_tensor):
+    """
+        tokens              : shape (b x i x d),
+        tensition_tensor    : shape (b x j x i), 
+
+        -----------------------------------------
+        (b x i x d) * (b x i x j)
+
+        returns             : shape (b x j x d)
+
+    """
+    return torch.bmm(transition_tensor, tokens)
+
+def broadcast_tokens_to_atoms_2D(tokens, transition_tensor):
+    """
+        tokens              : shape (b x i x i x d),
+        tensition_tensor    : shape (b x j x i), 
+
+        -----------------------------------------
+        (b x i x i d) * (b x i x 1 x j) => b x i x i x j
+
+        returns             : shape (b x j x d)
+
+    """
+    tokens = torch.matmul(transition_tensor.unsqueeze(1), tokens)
+    return torch.matmul(transition_tensor.unsqueeze(1), tokens.permute(0, 3, 1, 2)).permute((0,3,2,1))
+
+def mean_atom_aggregate(atoms, transition_tensor, dim=1):
+    """
+        atoms              : shape (b x j x d),
+        tensition_tensor    : shape (b x j x i), 
+
+        -----------------------------------------
+    
+        returns             : shape (b x i x d)
+
+    """
+    aggregate_atoms = einsum('bjd,bji->bjid', atoms, transition_tensor) # (b x i x 1 x d) * (b x i x j x 1) -> (b x i x j x d)
+    return aggregate_atoms.sum(dim) / atoms.shape[1]
+
+def extract_representative_atoms(atoms, transition_tensor, dim=1):
+    """
+        atoms              : shape (b x j x d),
+        tensition_tensor    : shape (b x i x j), 
+
+        -----------------------------------------
+    
+        returns             : shape (b x i x d)
+
+    """
+    aggregate_atoms = einsum('bjd,bij->bid', atoms, transition_tensor) # (b x i x 1 x d) * (b x i x j x 1) -> (b x i x j x d)
+    return aggregate_atoms
+
 def extract(a, t, x_shape):
     batch_size = t.shape[0]
     a = a.cpu()
@@ -589,14 +642,13 @@ class AtomAttentionEncoder(nn.Module):
         #If provided add trunk embeddings as the single conditioning
         if r is not None: #TODO : REDO THIS!!!!!!
             # Broadcast the single and pair embeddings from trunk
-            c += self.s_proj(self.s_norm(self.t_to_a_proj(s_trunk.permute((0,2,1))).permute((0,2,1))))
+            c += self.s_proj(self.s_norm(
+                broadcast_tokens_to_atoms(s_trunk, f['reference_tokens'])
+                ))
             P += self.z_proj(
                 self.z_norm(
-                    self.t_to_a_proj(
-                        self.t_to_a_proj(
-                            z_trunk.permute((0,3,1,2))
-                            ).permute((0,1,3,2)))
-                            .permute((0,3,2,1))))
+                   broadcast_tokens_to_atoms_2D(z_trunk, f['reference_tokens']
+                   )))
             #Add the noisy positions ??? idk why 
             q += self.r_proj(r) ### Might need to redo some of these.
         
@@ -611,7 +663,7 @@ class AtomAttentionEncoder(nn.Module):
         q = self.atom_transformer(q, c, P)
 
         # Aggregate per-atom representations to per-token representation.
-        a = self.a_to_t_proj(F.relu(self.q_proj(q)).permute((0, 2, 1))).permute((0, 2, 1)) # TODO: Fix the meaning of atoms in a residue??????
+        a = mean_atom_aggregate(F.relu(self.q_proj(q)), f['reference_tokens'])
 
         return a, q, c, P
 
@@ -818,45 +870,41 @@ class ConfidenceHead(nn.Module):
         self.PLDDT_proj = nn.Linear(cs, plddt_c)
         self.PRES_proj = nn.Linear(cs, pres_c)
 
-        self.a_to_t_proj = nn.Linear(Natoms, Ntokens, bias=False)
 
-    def forward(self, s_inp, s, z, x, reference_tokens):
+    def forward(self, s_inp, s, z, x, representative_atoms, reference_tokens=None):
         
-        # z += self.z_proj1(s_inp).unsqueeze(1) + self.z_proj2(s_inp).unsqueeze(2)
-        # x = x[reference_tokens]
-        # d = abs((x.unsqueeze(1) - x.unsqueeze(2)).sum(-1))
-        # z += self.d_proj(d)
-        # s_add, z_add = self.pairformer(s, z)
-        # s += s_add
-        # z += z_add
-        # p_pae = F.softmax(
-        #     self.PAE_proj(z), dim=-1
-        # )
-        p_pae = None
-        # p_pde = F.softmax(
-        #     self.PDE_proj(z+z.permute((0,2,1,3))), dim=-1
-        # )
-        p_pde = None
+        """
+        Inputs : 
+            s_inp   : b x i x cs 
+            s       : b x i x 
+            z       : b x i x i x cz
+            x       : b x l x 3
+            representative_atoms : b x i x l
+        
+        """
 
+        z += self.z_proj1(s_inp).unsqueeze(1) + self.z_proj2(s_inp).unsqueeze(2)
+        x = extract_representative_atoms(x, representative_atoms)
+        d = torch.abs((x.unsqueeze(1) - x.unsqueeze(2)).sum(-1, keepdim=True))
+        z += self.d_proj(d)
 
-        # p_plddt = F.softmax(
-        #     self.a_to_t_proj(
-        #             s.permute((0,2,1))self.PLDDT_proj(
-        #         ).permute((0,2,1)).permute((0,2,1))
-
-        #     )
-        # , dim=-1 )
+        s_add, z_add = self.pairformer(s, z)
+        s += s_add
+        z += z_add
+        
+        p_pae = F.softmax(
+            self.PAE_proj(z), dim=-1
+        )
+        p_pde = F.softmax(
+            self.PDE_proj(z+z.permute((0,2,1,3))), dim=-1
+        )
+        p_plddt = F.softmax(
+            self.PLDDT_proj(s)
+            , dim=-1 )
         p_res = F.softmax(
-            self.PRES_proj(
-                self.a_to_t_proj(
-                    s.permute((0,2,1))
-                ).permute((0,2,1))
-
-            )
+            self.PRES_proj(s)
         , dim=-1 )
-        return p_pae, p_pde
-
-from torch.profiler import profile, record_function, ProfilerActivity
+        return p_pae, p_pde, p_plddt, p_res
 
 
 class AlphaFold3_TEMPLE(nn.Module):
@@ -872,7 +920,7 @@ class AlphaFold3_TEMPLE(nn.Module):
         self.pairformer = Pairformer(params) 
         self.rope = RelativePositionEncoding(params)
         self.diffusion = Diffuser(params)
-        # self.confidence_head = ConfidenceHead(params)
+        self.confidence_head = ConfidenceHead(params)
 
 
         self.s_init_proj = nn.Linear(s_dim, cs, bias=False)
@@ -903,7 +951,6 @@ class AlphaFold3_TEMPLE(nn.Module):
         z = torch.zeros_like(z_init)
         s = torch.zeros_like(s_init)
 
-
         for i in range(self.Ncycles):
             z = z_init + self.z_proj(self.z_norm(z))
             s = s_init + self.s_proj(self.s_norm(s))
@@ -911,8 +958,8 @@ class AlphaFold3_TEMPLE(nn.Module):
 
         x = self.diffusion(f, s_init, s, z)
 
-        # pae, pde, plddt, pres = self.confidence_head(s_init, s, z, x, f['reference_tokens']),
-        return x #, pae, pde
+        p_pae, p_pde, p_plddt, p_res = self.confidence_head(s_init, s, z, x, f['represenative_atoms'])
+        return x, p_pae, p_pde, p_plddt, p_res
 
 def test_preformer_layer():
     if torch.cuda.is_available():
