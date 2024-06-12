@@ -712,6 +712,32 @@ def process_structure(args: Tuple[str, str, bool]):
                     f"Failed to remove partially processed file {output_filepath} due to: {e}. Skipping its removal..."
                 )
 
+def run(output_dir, num_workers, worker_chunk_size, skip_existing, ccd_dir, mmcif_dir):
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Load the Chemical Component Dictionary (CCD) into memory
+
+    print("Loading the Chemical Component Dictionary (CCD) into memory...")
+    CCD_READER_RESULTS = ccd_reader.read_pdb_components_file(
+        # Load globally to share amongst all worker processes
+        os.path.join(ccd_dir, "components.cif"),
+        sanitize=False,  # Reduce loading time
+    )
+    print("Finished loading the Chemical Component Dictionary (CCD) into memory.")
+
+    # Process structures across all worker processes
+
+    args_tuples = [
+        (filepath, output_dir, skip_existing)
+        for filepath in glob.glob(os.path.join(mmcif_dir, "*", "*.cif"))
+    ]
+    process_map(
+        process_structure,
+        args_tuples,
+        max_workers=num_workers,
+        chunksize=worker_chunk_size,
+    )
+
 
 if __name__ == '__main__':
     # Parse command-line arguments

@@ -61,9 +61,6 @@ Element_dict = {
     "Cd" : 48
 }
 
-def remove_condense_atoms():
-    pass
-
 class CCD_manager:
     def __init__(self, reference_filepath='data/CCD/', json_name='reference_conformer.json'):
         self.path = reference_filepath
