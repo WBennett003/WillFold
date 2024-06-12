@@ -577,8 +577,6 @@ class AtomAttentionEncoder(nn.Module):
         fdim = params['AAE_f_sum_dim']
         catoms = params['catoms']
         catom_pairs = params['catom_pairs']
-        ntokens = params['Ntokens']
-        natom = params['Natoms']
         cs = params['cs']
         cz = params['cz']
         self.device = params['device']
@@ -598,9 +596,6 @@ class AtomAttentionEncoder(nn.Module):
         self.r_proj = nn.Linear(3, cz)
 
         self.cp_proj = nn.Linear(catoms, catom_pairs, bias=False)
-
-        self.t_to_a_proj = nn.Linear(ntokens, natom, bias=False)
-        self.a_to_t_proj = nn.Linear(natom, ntokens, bias=False)
 
         self.MLP = nn.Sequential( # TODO: Was this meant to be high dimmension squick MLP or just a flat one?
             nn.ReLU(),
@@ -673,18 +668,14 @@ class AtomAttentionDecoder(nn.Module):
         super(AtomAttentionDecoder, self).__init__()
         self.atom_transformer = AtomTransformer(params, nheads, nblocks)
 
-        N_tokens = params['Ntokens']
-        N_atoms = params['Natoms']
-
         self.a_proj = nn.Linear(ctokens, catoms, bias=False)
         self.q_proj = nn.Linear(catoms, 3, bias=False)
         self.q_norm = nn.LayerNorm(catoms)
 
-        self.t_to_a_proj = nn.Linear(N_tokens, N_atoms, bias=False)
 
-    def forward(self, a, q_skip, c_skip, p_skip):
+    def forward(self, a, q_skip, c_skip, p_skip, transition_tensor):
         #broadcast per-token activations to per-atom activations and add the skip connection
-        q = self.a_proj(self.t_to_a_proj(a.permute((0,2,1))).permute(0,2,1)) + q_skip
+        q = self.a_proj(broadcast_tokens_to_atoms(a, transition_tensor)) + q_skip
 
         # Cross attention transformer
         q = self.atom_transformer(q, c_skip, p_skip)
@@ -775,7 +766,7 @@ class DiffusionModule(nn.Module): #NOTE: Algo 20
 
         #Full attention on token level
         a = self.diff_norm(a)
-        r = self.atom_attention_decoder(a, q, c, p)
+        r = self.atom_attention_decoder(a, q, c, p, f['reference_tokens'])
         #Broadcast token activation to atoms and run sequence local atom attention
 
         x = torch.square(self.sigma_data) / (torch.square(self.sigma_data) + torch.square(t))*x + self.sigma_data*t / torch.sqrt(torch.square(self.sigma_data) + torch.square(t)) *  r  #could make this a kernal
@@ -805,8 +796,6 @@ class Diffuser(nn.Module): # NOTE: Algo 18 : Sample Diffusion
         self.noise_scheular = NoiseSchedular(params['timesteps'], self.device)
         self.diff_model = DiffusionModule(params)
         self.central_rand_aug = CentreRandomAugmentation(self.strans, self.device)
-        self.Natoms = params['Natoms']
-        self.Ntokens = params['Ntokens']
 
         self.zero = torch.scalar_tensor(0, device=self.device)
         self.one = torch.scalar_tensor(1, device=self.device)
@@ -815,13 +804,13 @@ class Diffuser(nn.Module): # NOTE: Algo 18 : Sample Diffusion
         
         # N = torch.distributions.multivariate_normal.MultivariateNormal(torch.zeros(3, device=self.device), torch.eye(3, device=self.device))
         # x = N.sample((s_inp.shape[0], self.Natoms))
-        x = torch.randn((s_inp.shape[0], self.Natoms, 3), device=self.device)
+        x = torch.randn((s_inp.shape[0], f['ref_pos'].shape[1], 3), device=self.device)
         for i, ct in enumerate(self.noise_scheular.posterior_varience[1:]):
             x = self.central_rand_aug(x)
             gamma = self.gamma_0 if ct > self.gamma_min else self.zero
             t = self.noise_scheular.posterior_varience[i+1]*(gamma + self.one) # i is +1 to the real idx
             
-            ei = self.noise_scaler_lambda * torch.sqrt(torch.square(t) + torch.square(self.noise_scheular.posterior_varience[i])) * torch.rand((s_inp.shape[0], self.Natoms, 3), device=self.device)
+            ei = self.noise_scaler_lambda * torch.sqrt(torch.square(t) + torch.square(self.noise_scheular.posterior_varience[i])) * torch.rand((s_inp.shape[0], f['ref_pos'].shape[1], 3), device=self.device)
             x_noisy = x + ei
             x_denoised = self.diff_model(x_noisy, t, f, s_inp, s_trunk, z_trunk) #main bottle neck
             delta = (x - x_denoised) / t
@@ -855,8 +844,6 @@ class ConfidenceHead(nn.Module):
         pde_c = params['pde_c']
         pres_c = params['pres_c']
         plddt_c = params['plddt_c']
-        Ntokens = params['Ntokens']
-        Natoms = params['Natoms']
 
         self.pairformer = Pairformer(params)
 

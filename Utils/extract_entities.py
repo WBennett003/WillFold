@@ -26,11 +26,18 @@ def parse_nonpolymer(struct_dict, entity_id : int):
     return [struct_dict['_pdbx_entity_nonpoly.comp_id'][entity_index]]
 
 def get_connected_comps(x):
-    conn_ptnr_1_comp = x['_struct_conn.ptnr1_label_seq_id']             
-    conn_ptnr_2_comp = x['_struct_conn.ptnr2_label_seq_id']             
+    try:
+        conn_ptnr_1_comp = x['_struct_conn.ptnr1_label_seq_id']             
+        conn_ptnr_2_comp = x['_struct_conn.ptnr2_label_seq_id']             
 
-    token_conns = list(zip([conn_ptnr_1_comp, conn_ptnr_2_comp]))
-
+        token_conns = []
+        for i,conn in enumerate(conn_ptnr_1_comp):
+            try:
+                token_conns.append([int(conn_ptnr_1_comp[i]), int(conn_ptnr_2_comp[i])])
+            except ValueError:
+                pass
+    except KeyError:
+        token_conns = []    
     return token_conns
 
 # TODO: trim residues with no data
@@ -92,9 +99,9 @@ def extract_coordinates(filepath : str):
 
     # print(int(struct_dict['_atom_site.id'][-1]))
 
-    x = torch.tensor(struct_dict['_atom_site.Cartn_x'])
-    y = torch.tensor(struct_dict['_atom_site.Cartn_y'])
-    z = torch.tensor(struct_dict['_atom_site.Cartn_z'])
+    x = torch.tensor([float(x) for x in struct_dict['_atom_site.Cartn_x']])
+    y = torch.tensor([float(y) for y in struct_dict['_atom_site.Cartn_y']])
+    z = torch.tensor([float(z) for z in struct_dict['_atom_site.Cartn_z']])
     coords = torch.concat([x,y,z])
     return coords
 

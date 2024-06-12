@@ -16,14 +16,14 @@ def make_batched_to_device(f, batchify=False, device=None):
 
 def collate(batch):
     batched_f = {}
-    for key in batch[0].keys():
+    for key in batch[0][0].keys():
         batched_f[key] = []
 
     batched_xyz = []
     for i,b in enumerate(batch):
         for key in b[0].keys():
             batched_f[key].append(b[0][key])
-        batched_xyz.append[b[1]]
+        batched_xyz.append(b[1])
     
     for key in batched_f.keys():
         batched_f[key] = torch.concat(batched_f[key], dim=0)
@@ -49,5 +49,6 @@ class mmcif_dataset(Dataset):
         file_loc = self.mmcif_path+self.samples[index]+self.file_suffix
         entities, bonds = parse_CIF(file_loc, get_bonds=True)
         f = process_entities(entities, bonds, padding_size=4) #TODO: NEeds to pad for batching!!!
-        xyz = extract_coordinates(file_loc) # TODO: check that the atoms are resolved at the start and add cropping
+        f = make_batched_to_device(f, True, self.device)
+        xyz = extract_coordinates(file_loc).unsqueeze(0).to(self.device) # TODO: check that the atoms are resolved at the start and add cropping
         return f, xyz

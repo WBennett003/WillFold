@@ -1,38 +1,43 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, collate
+from torch.utils.data import DataLoader
 import json
 import os
 import glob
 
-from Utils.dataset import mmcif_dataset
+from Utils.dataset import mmcif_dataset, collate
 from Models.Modules import AlphaFold3_TEMPLE
 
 class Trainer:
-    def __init__(self, config_filepath):
-        self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    def __init__(self, config_filepath=None, config=None):
+        # self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-        with open(config_filepath, 'r') as f:
-            self.config = json.load(f)
-        
+        if config is None:
+            with open(config_filepath, 'r') as f:
+                self.config = json.load(f)
+        else:
+            self.config = config
+
+        self.device = self.config['model']['device']
+
         training, test, val = self.config['training_split']
 
-        dataset_samples = glob.glob(os.path.join(self.config['mmcif_path'], "*", "*.cif"))        
+        dataset_samples = ['1A00', '1A0A', '1A0B', '1A0C', '1A0D', '1A0E', '1A0F', '1A0G', '1A0H', '1A0I'] #glob.glob(os.path.join(self.config['mmcif_path'], "*", "*.cif"))        
         
         self.Ntokens = self.config['Ntokens']
         self.Natoms = self.config['Natoms']
 
         total_length = len(dataset_samples)
-        self.training_length = int(total_length * training)
+        self.train_length = int(total_length * training)
         self.test_length = int(total_length * test)
         self.val_length = int(total_length * val)
 
-        training_data = mmcif_dataset(self.config['mmcif_path'], samples=dataset_samples[:training_length], Ntokens=Ntokens, Natoms=Natoms)
+        training_data = mmcif_dataset(self.config['mmcif_path'], samples=dataset_samples[:self.train_length], Ntokens=self.Ntokens, Natoms=self.Natoms, device=self.device)
 
         self.dataloader = DataLoader(training_data, self.config['batch_size'], shuffle=True, collate_fn=collate)
 
-        self.model = AlphaFold3_TEMPLE(self.config['model'])
+        self.model = AlphaFold3_TEMPLE(self.config['model']).to(self.device)
 
     def eval(self, inputs, targets):
         pass

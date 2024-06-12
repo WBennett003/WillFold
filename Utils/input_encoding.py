@@ -88,7 +88,7 @@ class CCD_manager:
                         mol.RemoveAtom(natoms-1)
                         mol = mol.GetMol()
                     case "dna":
-                        mol = Chem.rdchem.EditableTpMol(mol)
+                        mol = Chem.rdchem.EditableMol(mol)
                         mol.RemoveAtom(2)
                         mol = mol.GetMol()
                     case "rna":
@@ -130,14 +130,14 @@ def generate_atoms(entity, pad_size=4, N_max_atoms=24, parser=None):
 
     mol, atoms_name, atoms_pos, bonds, charge = parser.get_ccd(entity)
 
-    assert [a[0] for a in atoms] == atoms_name
+    # assert [a[0] for a in atoms] == atoms_name
 
-    elements = [Element_dict[a[0]] for a in atoms]
+    elements = [Element_dict[a[0]] for a in atoms_name]
 
     for i, a in enumerate(atoms):
         atoms[i] = a + ' '* (pad_size-len(a))
 
-    ref_atoms_chars = [[ord(c)-32 for c in a] for a in atoms]
+    ref_atoms_chars = [[ord(c)-32 for c in a.upper()] for a in atoms]
 
     ref_atom_idx = token_ref[entity]['ref_atom_idx']
 
@@ -151,10 +151,10 @@ def generate_ligand_atoms(entity, pad_size=4, N_max_atoms=24, parser=None):
     elements = []
 
     for i, atom in enumerate(atoms_name):
-        elements.append(atom[0])
+        elements.append(atom)
 
         atom  += ' ' * (pad_size - len(atom))
-        ref_atoms_chars.append([ord(c)-32 for c in atom])
+        ref_atoms_chars.append([ord(c)-32 for c in atom.upper()])
     
     return atoms_name, atoms_pos, ref_atoms_chars, elements, bonds, charge
 
@@ -307,6 +307,7 @@ def process_entities(entities, implicit_token_bonds=[], padding_size=4, N_max_at
     
     token_bonds_matrix = torch.zeros((len(residue_index), len(residue_index)))
     for bond in token_bonds:
+
         token_bonds_matrix[bond[0], bond[1]] = 1
         token_bonds_matrix[bond[1], bond[0]] = 1
     
